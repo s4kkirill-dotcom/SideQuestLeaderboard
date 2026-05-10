@@ -1,0 +1,449 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Group</title>
+    <!-- Firebase SDKs (compat mode for simplicity) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth-compat.js"></script>
+    <style>
+        :root {
+            --bg: #0a0a0a;
+            --surface: #161616;
+            --red: #c0392b;
+            --red-bright: #e74c3c;
+            --text: #ddd;
+            --text-muted: #aaa;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            padding: 2rem 1rem;
+        }
+        .container {
+            max-width: 900px;
+            width: 100%;
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 0 30px rgba(231, 76, 60, 0.15);
+            border: 1px solid rgba(231, 76, 60, 0.3);
+        }
+        h1 {
+            text-align: center;
+            color: var(--red-bright);
+            font-size: 2.2rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            margin-bottom: 2rem;
+        }
+        h2 {
+            color: var(--red);
+            margin-bottom: 1rem;
+            border-bottom: 2px solid var(--red);
+            padding-bottom: 0.5rem;
+        }
+        .section { margin-bottom: 2.5rem; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #1c1c1c;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        th {
+            background: #2a2a2a;
+            color: var(--red-bright);
+            padding: 12px;
+            text-align: left;
+        }
+        td { padding: 10px 12px; border-bottom: 1px solid #333; }
+        tr:hover td { background: #222; }
+        button, .btn {
+            background: var(--red);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        button:hover, .btn:hover { background: #a93226; }
+        .btn-outline {
+            background: transparent;
+            border: 2px solid var(--red);
+            color: var(--red-bright);
+            margin-left: 1rem;
+        }
+        .btn-outline:hover { background: rgba(231, 76, 60, 0.15); }
+        input, select {
+            background: #2a2a2a;
+            border: 1px solid #444;
+            color: white;
+            padding: 8px 12px;
+            border-radius: 6px;
+            width: 100%;
+            margin: 5px 0 15px;
+        }
+        input:focus, select:focus { outline: none; border-color: var(--red-bright); }
+        .admin-panel {
+            background: #1a1a1a;
+            border: 1px solid var(--red);
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin-top: 2rem;
+        }
+        .login-section {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .login-section input {
+            width: auto;
+            display: inline-block;
+            margin-right: 10px;
+        }
+        .hidden { display: none; }
+        .flex-row { display: flex; gap: 10px; align-items: center; }
+        .flex-row > * { flex: 1; }
+        .top-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+        }
+        .logout { background: #444; }
+        .logout:hover { background: #666; }
+        .sqe-badge {
+            background: var(--red);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            margin-left: 5px;
+        }
+        .sidequest-count {
+            color: #aaa;
+            font-size: 0.9rem;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="top-bar">
+        <h1 style="margin:0;">The Group</h1>
+        <div>
+            <button id="loginBtn" class="btn">Admin Panel</button>
+            <button id="logoutBtn" class="btn logout hidden">Logout</button>
+        </div>
+    </div>
+
+    <!-- Leaderboard -->
+    <div class="section">
+        <h2>Leaderboard</h2>
+        <div id="leaderboardTable"><p>Loading…</p></div>
+    </div>
+
+    <!-- All Sidequests -->
+    <div class="section">
+        <h2>All Sidequests</h2>
+        <div id="sidequestsList"><p>Loading…</p></div>
+    </div>
+
+    <!-- Admin Login Modal (hidden initially) -->
+    <div id="loginModal" class="admin-panel hidden">
+        <h2 style="margin-top:0;">Admin Access</h2>
+        <p>Enter admin code to unlock panel.</p>
+        <input type="password" id="adminCodeInput" placeholder="Admin Code">
+        <button id="submitAdminCode">Unlock</button>
+        <p id="loginError" style="color: #e74c3c; margin-top:10px;"></p>
+    </div>
+
+    <!-- Admin Panel (shown after login) -->
+    <div id="adminPanel" class="admin-panel hidden">
+        <h2 style="margin-top:0;">Admin Panel</h2>
+        <div class="flex-row">
+            <div style="flex:2;">
+                <h3>Members</h3>
+                <div class="flex-row">
+                    <input type="text" id="newMemberName" placeholder="Member name">
+                    <button id="addMemberBtn">Add</button>
+                </div>
+                <select id="memberSelect" style="margin-top:15px;"><option value="">-- Select member --</option></select>
+                <button id="deleteMemberBtn" style="margin-top:5px;">Delete Member</button>
+            </div>
+            <div style="flex:2;">
+                <h3>SQE Adjustments</h3>
+                <p>Select member & amount to add (positive) or remove (negative).</p>
+                <div class="flex-row">
+                    <input type="number" id="sqeAmount" placeholder="+/- value" step="any">
+                    <button id="adjustSqeBtn">Apply</button>
+                </div>
+                <p style="margin-top:15px;">Or set total SQE from your <strong>AI calculator</strong>:</p>
+                <div class="flex-row">
+                    <input type="number" id="aiSqeTotal" placeholder="Total SQE number" step="any">
+                    <button id="setAiSqeBtn">Set Total</button>
+                </div>
+            </div>
+            <div style="flex:2;">
+                <h3>Sidequests</h3>
+                <div class="flex-row">
+                    <input type="text" id="newSidequestName" placeholder="Quest name">
+                    <button id="addSidequestBtn">Add</button>
+                </div>
+                <select id="sidequestSelect" style="margin-top:15px;"><option value="">-- Select quest --</option></select>
+                <button id="deleteSidequestBtn" style="margin-top:5px;">Delete</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+ // For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyD6su-kYNl90bp4zpU7PxHswUGNJhjno5A",
+  authDomain: "sidequestleadrboard.firebaseapp.com",
+  databaseURL: "https://sidequestleadrboard-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "sidequestleadrboard",
+  storageBucket: "sidequestleadrboard.firebasestorage.app",
+  messagingSenderId: "52905442784",
+  appId: "1:52905442784:web:74cbbb3fd5ebe705d33f85",
+  measurementId: "G-GKNQ71MQK6"
+};
+
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+  const auth = firebase.auth();
+
+  // ---------- DOM elements ----------
+  const loginBtn = document.getElementById('loginBtn');
+  const logoutBtn = document.getElementById('logoutBtn');
+  const loginModal = document.getElementById('loginModal');
+  const adminPanel = document.getElementById('adminPanel');
+  const adminCodeInput = document.getElementById('adminCodeInput');
+  const submitAdminCode = document.getElementById('submitAdminCode');
+  const loginError = document.getElementById('loginError');
+
+  // Leaderboard & sidequests display
+  const leaderboardTable = document.getElementById('leaderboardTable');
+  const sidequestsList = document.getElementById('sidequestsList');
+
+  // Admin controls
+  const newMemberName = document.getElementById('newMemberName');
+  const addMemberBtn = document.getElementById('addMemberBtn');
+  const memberSelect = document.getElementById('memberSelect');
+  const deleteMemberBtn = document.getElementById('deleteMemberBtn');
+  const sqeAmount = document.getElementById('sqeAmount');
+  const adjustSqeBtn = document.getElementById('adjustSqeBtn');
+  const aiSqeTotal = document.getElementById('aiSqeTotal');
+  const setAiSqeBtn = document.getElementById('setAiSqeBtn');
+  const newSidequestName = document.getElementById('newSidequestName');
+  const addSidequestBtn = document.getElementById('addSidequestBtn');
+  const sidequestSelect = document.getElementById('sidequestSelect');
+  const deleteSidequestBtn = document.getElementById('deleteSidequestBtn');
+
+  // ---------- Real-time listeners ----------
+  function loadLeaderboard() {
+    db.collection('members').orderBy('sqe', 'desc').onSnapshot(snapshot => {
+      if (snapshot.empty) {
+        leaderboardTable.innerHTML = '<p>No members yet. The board awaits.</p>';
+        populateMemberSelects(snapshot);
+        return;
+      }
+      let html = '<table><tr><th>Rank</th><th>Name</th><th>SQE</th><th>Sidequests</th></tr>';
+      let rank = 1;
+      snapshot.forEach(doc => {
+        const data = doc.data();
+        html += `<tr>
+          <td>${rank}</td>
+          <td>${escapeHtml(data.name)}</td>
+          <td><span class="sqe-badge">${data.sqe}</span></td>
+          <td class="sidequest-count">${data.sidequestCount || 0}</td>
+        </tr>`;
+        rank++;
+      });
+      html += '</table>';
+      leaderboardTable.innerHTML = html;
+      populateMemberSelects(snapshot);
+    }, error => {
+      leaderboardTable.innerHTML = '<p style="color:#e74c3c;">Error loading leaderboard. Check console.</p>';
+      console.error(error);
+    });
+  }
+
+  function loadSidequests() {
+    db.collection('sidequests').orderBy('name').onSnapshot(snapshot => {
+      if (snapshot.empty) {
+        sidequestsList.innerHTML = '<p>No sidequests recorded yet.</p>';
+        populateSidequestSelect(snapshot);
+        return;
+      }
+      let html = '<ul style="list-style:none; padding:0;">';
+      snapshot.forEach(doc => {
+        html += `<li style="padding:6px 0; border-bottom:1px solid #333;">&#8226; ${escapeHtml(doc.data().name)}</li>`;
+      });
+      html += '</ul>';
+      sidequestsList.innerHTML = html;
+      populateSidequestSelect(snapshot);
+    }, error => {
+      sidequestsList.innerHTML = '<p style="color:#e74c3c;">Error loading sidequests.</p>';
+      console.error(error);
+    });
+  }
+
+  function populateMemberSelects(snapshot) {
+    // Populate member dropdowns
+    memberSelect.innerHTML = '<option value="">-- Select member --</option>';
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      memberSelect.innerHTML += `<option value="${doc.id}">${escapeHtml(data.name)} (SQE: ${data.sqe})</option>`;
+    });
+  }
+
+  function populateSidequestSelect(snapshot) {
+    sidequestSelect.innerHTML = '<option value="">-- Select quest --</option>';
+    snapshot.forEach(doc => {
+      sidequestSelect.innerHTML += `<option value="${doc.id}">${escapeHtml(doc.data().name)}</option>`;
+    });
+  }
+
+  function escapeHtml(text) {
+    return String(text).replace(/[&<>"']/g, function(m) {
+      return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m];
+    });
+  }
+
+  // ---------- Auth state ----------
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      // Logged in
+      loginBtn.classList.add('hidden');
+      logoutBtn.classList.remove('hidden');
+      loginModal.classList.add('hidden');
+      adminPanel.classList.remove('hidden');
+    } else {
+      // Logged out
+      loginBtn.classList.remove('hidden');
+      logoutBtn.classList.add('hidden');
+      adminPanel.classList.add('hidden');
+      adminCodeInput.value = '';
+      loginError.textContent = '';
+    }
+  });
+
+  loginBtn.addEventListener('click', () => {
+    loginModal.classList.toggle('hidden');
+  });
+
+  logoutBtn.addEventListener('click', () => {
+    auth.signOut();
+  });
+
+  submitAdminCode.addEventListener('click', async () => {
+    const code = adminCodeInput.value.trim();
+    if (!code) {
+      loginError.textContent = 'Enter the admin code.';
+      return;
+    }
+    loginError.textContent = '';
+    try {
+      // Sign in with fixed admin email and the provided code as password
+      await auth.signInWithEmailAndPassword('admin@thegroup.com', code);
+    } catch (e) {
+      loginError.textContent = 'Incorrect admin code or system error.';
+      console.error(e);
+    }
+  });
+
+  // ---------- Admin actions ----------
+  addMemberBtn.addEventListener('click', async () => {
+    const name = newMemberName.value.trim();
+    if (!name) return alert('Enter a name.');
+    try {
+      await db.collection('members').add({
+        name: name,
+        sqe: 0,
+        sidequestCount: 0
+      });
+      newMemberName.value = '';
+    } catch (e) { alert('Error: '+e.message); }
+  });
+
+  deleteMemberBtn.addEventListener('click', async () => {
+    const id = memberSelect.value;
+    if (!id) return alert('Select a member first.');
+    if (!confirm('Delete this member and all their data?')) return;
+    try {
+      await db.collection('members').doc(id).delete();
+    } catch (e) { alert('Error: '+e.message); }
+  });
+
+  adjustSqeBtn.addEventListener('click', async () => {
+    const id = memberSelect.value;
+    if (!id) return alert('Select a member.');
+    const amount = parseFloat(sqeAmount.value);
+    if (isNaN(amount)) return alert('Enter a numeric amount.');
+    try {
+      // Increment SQE (positive or negative) and optionally adjust sidequest count
+      const docRef = db.collection('members').doc(id);
+      const doc = await docRef.get();
+      if (!doc.exists) return alert('Member not found.');
+      const current = doc.data().sqe || 0;
+      const newSqe = current + amount;
+      // If adding a positive amount, we assume a sidequest was completed (increase count by 1)
+      // If negative, you might want to decrease, but we'll leave sidequestCount unchanged.
+      const updates = { sqe: newSqe };
+      if (amount > 0) {
+        updates.sidequestCount = firebase.firestore.FieldValue.increment(1);
+      }
+      await docRef.update(updates);
+      sqeAmount.value = '';
+    } catch (e) { alert('Error: '+e.message); }
+  });
+
+  setAiSqeBtn.addEventListener('click', async () => {
+    const id = memberSelect.value;
+    if (!id) return alert('Select a member.');
+    const total = parseFloat(aiSqeTotal.value);
+    if (isNaN(total)) return alert('Enter the total SQE from your AI.');
+    try {
+      // Directly set the total SQE value (AI calculator output)
+      // Note: sidequestCount is left unchanged; adjust manually if needed.
+      await db.collection('members').doc(id).update({ sqe: total });
+      aiSqeTotal.value = '';
+    } catch (e) { alert('Error: '+e.message); }
+  });
+
+  addSidequestBtn.addEventListener('click', async () => {
+    const name = newSidequestName.value.trim();
+    if (!name) return alert('Enter sidequest name.');
+    try {
+      await db.collection('sidequests').add({ name });
+      newSidequestName.value = '';
+    } catch (e) { alert('Error: '+e.message); }
+  });
+
+  deleteSidequestBtn.addEventListener('click', async () => {
+    const id = sidequestSelect.value;
+    if (!id) return alert('Select a sidequest.');
+    if (!confirm('Delete this sidequest?')) return;
+    try {
+      await db.collection('sidequests').doc(id).delete();
+    } catch (e) { alert('Error: '+e.message); }
+  });
+
+  // Start real-time updates
+  loadLeaderboard();
+  loadSidequests();
+</script>
+</body>
+</html>
